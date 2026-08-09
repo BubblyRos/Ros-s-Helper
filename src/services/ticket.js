@@ -571,7 +571,8 @@ export async function reopenTicket(channel, reopener) {
     }
 
     const config = await getGuildConfig(channel.client, channel.guild.id);
-    const openCategoryId = config.ticketCategoryId || null;
+    const openCategory = await getNextTicketCategory(channel.guild, config);
+    const openCategoryId = openCategory?.id || null;
     let movedToOpenCategory = false;
     let openCategoryMoveFailed = false;
     
@@ -583,9 +584,6 @@ export async function reopenTicket(channel, reopener) {
     await saveTicketData(channel.guild.id, channel.id, ticketData);
 
     if (openCategoryId && channel.parentId !== openCategoryId) {
-      const openCategory = channel.guild.channels.cache.get(openCategoryId)
-        || await channel.guild.channels.fetch(openCategoryId).catch(() => null);
-
       if (openCategory?.type === ChannelType.GuildCategory) {
         try {
           await channel.setParent(openCategoryId, { lockPermissions: false });
