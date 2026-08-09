@@ -119,7 +119,19 @@ export default {
     category: "ticket",
 
     async execute(interaction, config, client) {
+        logger.info('Ticket command invoked', {
+            userId: interaction.user?.id,
+            guildId: interaction.guildId,
+            subcommand: interaction.options?.getSubcommand?.(),
+        });
+
         const deferred = await InteractionHelper.safeDefer(interaction, { flags: MessageFlags.Ephemeral });
+        logger.info('Ticket command defer result', {
+            deferred,
+            replied: interaction.replied,
+            deferredState: interaction.deferred,
+            guildId: interaction.guildId,
+        });
         if (!deferred) {
             return;
         }
@@ -144,7 +156,17 @@ export default {
         }
 
         if (subcommand === "setup") {
+            logger.info('Ticket setup started', {
+                guildId: interaction.guildId,
+                userId: interaction.user?.id,
+            });
+
             const existingConfig = await getGuildConfig(client, interaction.guildId);
+            logger.info('Existing ticket config loaded', {
+                guildId: interaction.guildId,
+                hasExistingConfig: Boolean(existingConfig),
+                panelChannelId: existingConfig?.ticketPanelChannelId,
+            });
             if (existingConfig?.ticketPanelChannelId) {
                 return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: `This server already has a ticket system set up (panel in <#${existingConfig.ticketPanelChannelId}>).\n\nOnly one ticket system is supported per server. Use \`/ticket dashboard\` to edit or update the existing setup, or select **Delete System** from the dashboard to remove it and start fresh.` });
             }
@@ -173,8 +195,17 @@ export default {
             );
 
             try {
+                logger.info('Ticket setup permission check', {
+                    guildId: interaction.guildId,
+                    panelChannelId: panelChannel?.id,
+                    panelChannelName: panelChannel?.name,
+                });
                 await ensurePanelSendPermissions(interaction, panelChannel, client);
 
+                logger.info('Ticket setup sending panel', {
+                    guildId: interaction.guildId,
+                    panelChannelId: panelChannel?.id,
+                });
                 const sentPanel = await panelChannel.send({
                     embeds: [setupEmbed],
                     components: [ticketButton],
@@ -228,6 +259,12 @@ export default {
                 }
                 
                 successMessage += `\n\n**Max Tickets Per User:** ${maxTicketsPerUser}\n**DM on Close:** ${dmOnClose ? 'Enabled' : 'Disabled'}`;
+
+                logger.info('Ticket setup success reply', {
+                    guildId: interaction.guildId,
+                    panelChannelId: panelChannel.id,
+                    messageId: sentPanel?.id,
+                });
 
                 await InteractionHelper.safeEditReply(interaction, {
                     embeds: [
