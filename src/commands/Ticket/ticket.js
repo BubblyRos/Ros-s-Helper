@@ -46,7 +46,7 @@ export default {
                 )
                 .addChannelOption((option) =>
                     option
-.setName("panel_channel")
+                        .setName("panel_channel")
                         .setDescription(
                             "The channel where the ticket panel will be sent.",
                         )
@@ -149,28 +149,25 @@ export default {
                 return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: `This server already has a ticket system set up (panel in <#${existingConfig.ticketPanelChannelId}>).\n\nOnly one ticket system is supported per server. Use \`/ticket dashboard\` to edit or update the existing setup, or select **Delete System** from the dashboard to remove it and start fresh.` });
             }
 
-            const panelChannel =
-                interaction.options.getChannel("panel_channel");
+            const panelChannel = interaction.options.getChannel("panel_channel");
             const categoryChannel = interaction.options.getChannel("category");
             const closedCategoryChannel = interaction.options.getChannel("closed_category");
             const staffRole = interaction.options.getRole("staff_role");
-const panelMessage = interaction.options.getString("panel_message") || "Click the button below to create a support ticket.";
-            const buttonLabel =
-                interaction.options.getString("button_label") ||
-"Create Ticket";
+            const panelMessage = interaction.options.getString("panel_message") || "Click the button below to create a support ticket.";
+            const buttonLabel = interaction.options.getString("button_label") || "Create Ticket";
             const maxTicketsPerUser = interaction.options.getInteger("max_tickets_per_user") || 3;
-const dmOnClose = interaction.options.getBoolean("dm_on_close") !== false;
+            const dmOnClose = interaction.options.getBoolean("dm_on_close") !== false;
 
-            const setupEmbed = createEmbed({ 
-                title: "Support Tickets", 
-description: panelMessage,
+            const setupEmbed = createEmbed({
+                title: "Support Tickets",
+                description: panelMessage,
                 color: getColor('info')
             });
 
             const ticketButton = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId("create_ticket")
-.setLabel(buttonLabel)
+                    .setLabel(buttonLabel)
                     .setStyle(ButtonStyle.Primary)
                     .setEmoji("📩"),
             );
