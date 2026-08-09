@@ -79,20 +79,30 @@ async function getNextTicketCategory(guild, config) {
   }
 
   const rotationIndex = Number.isInteger(config.ticketCategoryRotationIndex) ? config.ticketCategoryRotationIndex : 0;
-  const selectedCategoryId = categoryIds[rotationIndex % categoryIds.length];
-  const nextRotation = (rotationIndex + 1) % categoryIds.length;
+  const totalCategories = categoryIds.length;
 
-  config.ticketCategoryRotationIndex = nextRotation;
+  for (let offset = 0; offset < totalCategories; offset += 1) {
+    const index = (rotationIndex + offset) % totalCategories;
+    const candidateCategoryId = categoryIds[index];
+    const candidateCategory = await resolveCategory(guild, candidateCategoryId);
 
-  if (guild.client && guild.id) {
-    try {
-      await setGuildConfig(guild.client, guild.id, config);
-    } catch (error) {
-      logger.warn(`Could not persist ticket category rotation for guild ${guild.id}: ${error.message}`);
+    if (candidateCategory?.type === ChannelType.GuildCategory) {
+      const nextRotation = (index + 1) % totalCategories;
+      config.ticketCategoryRotationIndex = nextRotation;
+
+      if (guild.client && guild.id) {
+        try {
+          await setGuildConfig(guild.client, guild.id, config);
+        } catch (error) {
+          logger.warn(`Could not persist ticket category rotation for guild ${guild.id}: ${error.message}`);
+        }
+      }
+
+      return candidateCategory;
     }
   }
 
-  return resolveCategory(guild, selectedCategoryId);
+  return null;
 }
 
 function buildTicketControlRow({ claimedBy = null } = {}) {

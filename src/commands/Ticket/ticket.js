@@ -6,6 +6,22 @@ import { InteractionHelper } from '../../utils/interactionHelper.js';
 import { logger } from '../../utils/logger.js';
 import { handleInteractionError, replyUserError, ErrorTypes } from '../../utils/errorHandler.js';
 
+function parseCategoryIds(input) {
+    if (!input || typeof input !== 'string') return [];
+
+    return Array.from(new Set(
+        input
+            .split(/[,\s]+/)
+            .map(value => {
+                const mentionMatch = value.match(/^<#(\d{17,19})>$/);
+                if (mentionMatch) return mentionMatch[1];
+                const idMatch = value.match(/^(\d{17,19})$/);
+                return idMatch ? idMatch[1] : null;
+            })
+            .filter(Boolean)
+    ));
+}
+
 import ticketConfig from './modules/ticket_dashboard.js';
 
 async function ensurePanelSendPermissions(interaction, panelChannel, client) {
@@ -77,6 +93,14 @@ export default {
                             "The category where new tickets will be created (optional).",
                         )
                         .addChannelTypes(ChannelType.GuildCategory)
+                        .setRequired(false),
+                )
+                .addStringOption((option) =>
+                    option
+                        .setName("open_categories")
+                        .setDescription(
+                            "One or more categories where new tickets will be created, separated by spaces or commas. Use channel mentions or IDs.",
+                        )
                         .setRequired(false),
                 )
                 .addChannelOption((option) =>
@@ -173,12 +197,14 @@ export default {
 
             const panelChannel = interaction.options.getChannel("panel_channel");
             const categoryChannel = interaction.options.getChannel("category");
+            const openCategoriesRaw = interaction.options.getString("open_categories");
             const closedCategoryChannel = interaction.options.getChannel("closed_category");
             const staffRole = interaction.options.getRole("staff_role");
             const panelMessage = interaction.options.getString("panel_message") || "Click the button below to create a support ticket.";
             const buttonLabel = interaction.options.getString("button_label") || "Create Ticket";
             const maxTicketsPerUser = interaction.options.getInteger("max_tickets_per_user") || 3;
             const dmOnClose = interaction.options.getBoolean("dm_on_close") !== false;
+            let selectedCategories = [];
 
             const setupEmbed = createEmbed({
                 title: "Support Tickets",
@@ -212,12 +238,30 @@ export default {
                 });
 
                 if (client.db && interaction.guildId) {
-                    const currentConfig = existingConfig;
-                    currentConfig.ticketCategoryId = categoryChannel ? categoryChannel.id : null;
-                    currentConfig.ticketCategoryIds = categoryChannel ? [categoryChannel.id] : [];
-                    currentConfig.ticketCategories = categoryChannel
-                        ? [{ id: categoryChannel.id, label: categoryChannel.name, emoji: '🎫' }]
-                        : [];
+                    const currentConfig = existingConfig || {};
+                    const openCategoryIds = parseCategoryIds(openCategoriesRaw);
+
+                    if (openCategoryIds.length > 0) {
+                        for (const categoryId of openCategoryIds) {
+                            const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+                            if (!category || category.type !== ChannelType.GuildCategory) {
+                                return await replyUserError(interaction, {
+                                    type: ErrorTypes.VALIDATION,
+                                    message: `The category ${categoryId} is invalid. Please provide valid category mentions or IDs.`,
+                                });
+                            }
+                            selectedCategories.push(category);
+                        }
+                    }
+
+                    const openCategorySource = selectedCategories.length > 0 ? selectedCategories : (categoryChannel ? [categoryChannel] : []);
+                    currentConfig.ticketCategoryIds = openCategorySource.map(category => category.id);
+                    currentConfig.ticketCategoryId = openCategorySource[0]?.id || null;
+                    currentConfig.ticketCategories = openCategorySource.map(category => ({
+                        id: category.id,
+                        label: category.name,
+                        emoji: '🎫',
+                    }));
                     currentConfig.ticketClosedCategoryId = closedCategoryChannel ? closedCategoryChannel.id : null;
                     currentConfig.ticketStaffRoleId = staffRole ? staffRole.id : null;
                     currentConfig.ticketPanelChannelId = panelChannel.id;
@@ -244,8 +288,11 @@ export default {
 
                 let successMessage = `The ticket creation panel has been sent to ${panelChannel}.`;
                 
-                if (categoryChannel) {
+                if (selectedCategories && selectedCategories.length > 0) {
+                    successMessage += `New tickets will be created in ${selectedCategories.map(category => `**${category.name}**`).join(', ')}.`;
+                } else if (categoryChannel) {
                     successMessage += `New tickets will be created in the **${categoryChannel.name}** category.`;
+                    successMessage += ' You can add more open ticket categories later from the ticket dashboard.';
                 } else {
                     successMessage += 'New tickets will be created in a new "Tickets" category.';
                 }

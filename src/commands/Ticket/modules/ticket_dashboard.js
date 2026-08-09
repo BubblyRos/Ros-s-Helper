@@ -544,7 +544,12 @@ async function handleOpenCategory(selectInteraction, rootInteraction, guildConfi
         currentCategories.push(guildConfig.ticketCategoryId);
     }
 
-    const currentValue = currentCategories.length > 0 ? currentCategories.join(', ') : '`Not set`';
+    const currentValue = currentCategories.length > 0
+        ? currentCategories.map(categoryId => {
+            const category = selectInteraction.guild.channels.cache.get(categoryId);
+            return category ? `**${category.name}**` : `\`${categoryId}\``;
+          }).join(', ')
+        : '`Not set`';
 
     await selectInteraction.followUp({
         embeds: [
