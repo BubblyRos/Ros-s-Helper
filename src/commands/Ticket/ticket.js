@@ -8,6 +8,31 @@ import { handleInteractionError, replyUserError, ErrorTypes } from '../../utils/
 
 import ticketConfig from './modules/ticket_dashboard.js';
 
+async function ensurePanelSendPermissions(interaction, panelChannel, client) {
+    if (!panelChannel || typeof panelChannel.send !== 'function') {
+        throw new Error('The selected panel channel is invalid.');
+    }
+
+    const botPermissions = panelChannel.permissionsFor?.(client.user);
+    const missing = [];
+
+    if (!botPermissions?.has(PermissionFlagsBits.ViewChannel)) {
+        missing.push('View Channel');
+    }
+    if (!botPermissions?.has(PermissionFlagsBits.SendMessages)) {
+        missing.push('Send Messages');
+    }
+    if (!botPermissions?.has(PermissionFlagsBits.EmbedLinks)) {
+        missing.push('Embed Links');
+    }
+
+    if (missing.length) {
+        throw new Error(`The bot is missing these permissions in the selected channel: ${missing.join(', ')}.`);
+    }
+
+    return true;
+}
+
 export default {
     data: new SlashCommandBuilder()
         .setName("ticket")
@@ -151,6 +176,8 @@ description: panelMessage,
             );
 
             try {
+                await ensurePanelSendPermissions(interaction, panelChannel, client);
+
                 const sentPanel = await panelChannel.send({
                     embeds: [setupEmbed],
                     components: [ticketButton],
