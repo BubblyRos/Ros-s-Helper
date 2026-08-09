@@ -94,7 +94,7 @@ export default {
     category: "ticket",
 
     async execute(interaction, config, client) {
-        const deferred = await InteractionHelper.safeDefer(interaction, { flags: MessageFlags.Ephemeral });
+        const deferred = await InteractionHelper.safeDefer(interaction, { flags: Me    ssageFlags.Ephemeral });
         if (!deferred) {
             return;
         }
@@ -159,6 +159,16 @@ description: panelMessage,
                 if (client.db && interaction.guildId) {
                     const currentConfig = existingConfig;
                     currentConfig.ticketCategoryId = categoryChannel ? categoryChannel.id : null;
+
+currentConfig.ticketCategories = categoryChannel
+    ? [
+        {
+            id: categoryChannel.id,
+            label: categoryChannel.name,
+            emoji: '🎫',
+        },
+    ]
+    : [];
                     currentConfig.ticketClosedCategoryId = closedCategoryChannel ? closedCategoryChannel.id : null;
                     currentConfig.ticketStaffRoleId = staffRole ? staffRole.id : null;
                     currentConfig.ticketPanelChannelId = panelChannel.id;
