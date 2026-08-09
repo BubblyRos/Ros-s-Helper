@@ -160,13 +160,10 @@ const createTicketModalHandler = {
       if (!deferSuccess) return;
       
       const reason = interaction.fields.getTextInputValue('reason');
-      const config = await getGuildConfig(client, interaction.guildId);
-      const categoryId = config.ticketCategoryId || null;
-      
       const { channel } = await createTicket(
         interaction.guild,
         interaction.member,
-        categoryId,
+        null,
         reason
       );
       await interaction.editReply({

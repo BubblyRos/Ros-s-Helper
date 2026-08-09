@@ -123,14 +123,32 @@ function formatCloseDuration(ms) {
     return `${minutes}m`;
 }
 
+function formatConfiguredCategories(config, guild) {
+    const configuredCategoryIds = [];
+
+    if (Array.isArray(config.ticketCategoryIds) && config.ticketCategoryIds.length > 0) {
+        configuredCategoryIds.push(...config.ticketCategoryIds.filter(Boolean));
+    } else if (Array.isArray(config.ticketCategories) && config.ticketCategories.length > 0) {
+        configuredCategoryIds.push(...config.ticketCategories.map(entry => (typeof entry === 'string' ? entry : entry?.id)).filter(Boolean));
+    } else if (config.ticketCategoryId) {
+        configuredCategoryIds.push(config.ticketCategoryId);
+    }
+
+    if (!configuredCategoryIds.length) return '`Not set`';
+
+    return configuredCategoryIds.map(categoryId => {
+        const category = guild.channels.cache.get(categoryId);
+        return category ? `**${category.name}**` : `\`${categoryId}\``;
+    }).join(', ');
+}
+
 function buildDashboardEmbed(config, guild, panelStatus = null, ticketStats = null) {
     const panelChannel = config.ticketPanelChannelId ? `<#${config.ticketPanelChannelId}>` : '`Not set`';
     const staffRole = config.ticketStaffRoleId ? `<@&${config.ticketStaffRoleId}>` : '`Not set`';
     const ticketLogsChannel = config.ticketLogsChannelId ? `<#${config.ticketLogsChannelId}>` : '`Not set`';
     const transcriptChannel = config.ticketTranscriptChannelId ? `<#${config.ticketTranscriptChannelId}>` : '`Not set`';
 
-    const openCategoryChannel = config.ticketCategoryId ? guild.channels.cache.get(config.ticketCategoryId) : null;
-    const openCategory = openCategoryChannel ? openCategoryChannel.toString() : '`Not set`';
+    const openCategories = formatConfiguredCategories(config, guild);
     
     const closedCategoryChannel = config.ticketClosedCategoryId ? guild.channels.cache.get(config.ticketClosedCategoryId) : null;
     const closedCategory = closedCategoryChannel ? closedCategoryChannel.toString() : '`Not set`';
@@ -156,7 +174,7 @@ function buildDashboardEmbed(config, guild, panelStatus = null, ticketStats = nu
             { name: 'Panel Channel', value: panelChannel, inline: true },
             { name: 'Staff Role', value: staffRole, inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
-            { name: 'Open Tickets Category', value: openCategory, inline: true },
+            { name: 'Open Ticket Categories', value: openCategories, inline: true },
             { name: 'Closed Tickets Category', value: closedCategory, inline: true },
             { name: '\u200B', value: '\u200B', inline: true },
             { name: 'Panel Message', value: panelMsg, inline: false },
@@ -190,8 +208,8 @@ function buildSelectMenu(guildId) {
                 .setValue('button_label')
                 .setEmoji('🏷️'),
             new StringSelectMenuOptionBuilder()
-                .setLabel('Change Open Tickets Category')
-                .setDescription('Category where new tickets are created')
+                .setLabel('Change Open Ticket Categories')
+                .setDescription('Categories where new tickets can be created')
                 .setValue('open_category')
                 .setEmoji('📁'),
             new StringSelectMenuOptionBuilder()
@@ -513,16 +531,27 @@ async function handleOpenCategory(selectInteraction, rootInteraction, guildConfi
 
     const channelSelect = new ChannelSelectMenuBuilder()
         .setCustomId('ticket_cfg_open_cat')
-        .setPlaceholder('Select a category...')
+        .setPlaceholder('Select one or more categories...')
         .addChannelTypes(ChannelType.GuildCategory)
-        .setMaxValues(1);
+        .setMaxValues(10);
+
+    const currentCategories = [];
+    if (Array.isArray(guildConfig.ticketCategoryIds) && guildConfig.ticketCategoryIds.length > 0) {
+        currentCategories.push(...guildConfig.ticketCategoryIds.filter(Boolean));
+    } else if (Array.isArray(guildConfig.ticketCategories) && guildConfig.ticketCategories.length > 0) {
+        currentCategories.push(...guildConfig.ticketCategories.map(entry => (typeof entry === 'string' ? entry : entry?.id)).filter(Boolean));
+    } else if (guildConfig.ticketCategoryId) {
+        currentCategories.push(guildConfig.ticketCategoryId);
+    }
+
+    const currentValue = currentCategories.length > 0 ? currentCategories.join(', ') : '`Not set`';
 
     await selectInteraction.followUp({
         embeds: [
             new EmbedBuilder()
-                .setTitle('📁 Change Open Tickets Category')
+                .setTitle('📁 Change Open Ticket Categories')
                 .setDescription(
-                    `**Current:** ${guildConfig.ticketCategoryId ? `<#${guildConfig.ticketCategoryId}>` : '`Not set`'}\n\nSelect the category where new tickets will be created.`,
+                    `**Current:** ${currentValue}\n\nSelect one or more categories where new tickets can be created.`,
                 )
                 .setColor(getColor('info')),
         ],
@@ -540,16 +569,26 @@ async function handleOpenCategory(selectInteraction, rootInteraction, guildConfi
 
     catCollector.on('collect', async catInteraction => {
         await catInteraction.deferUpdate();
-        const category = catInteraction.channels.first();
+        const selectedCategories = Array.from(catInteraction.channels.values());
 
-        guildConfig.ticketCategoryId = category.id;
+        guildConfig.ticketCategoryIds = selectedCategories.map(category => category.id);
+        guildConfig.ticketCategoryId = selectedCategories[0]?.id || null;
+        guildConfig.ticketCategories = selectedCategories.map(category => ({
+            id: category.id,
+            label: category.name,
+            emoji: '🎫',
+        }));
         await setGuildConfig(client, guildId, guildConfig);
+
+        const message = selectedCategories.length > 0
+            ? `New tickets can now be created in ${selectedCategories.map(category => `**${category.name}**`).join(', ')}.`
+            : 'No open ticket categories are set. New tickets will use the default fallback behavior.';
 
         await catInteraction.followUp({
             embeds: [
                 successEmbed(
-                    'Open Category Updated',
-                    `New tickets will now be created in **${category.name}**.`,
+                    'Open Categories Updated',
+                    message,
                 ),
             ],
             flags: MessageFlags.Ephemeral,

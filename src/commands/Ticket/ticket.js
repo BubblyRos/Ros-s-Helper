@@ -159,6 +159,16 @@ description: panelMessage,
                 if (client.db && interaction.guildId) {
                     const currentConfig = existingConfig;
                     currentConfig.ticketCategoryId = categoryChannel ? categoryChannel.id : null;
+                    currentConfig.ticketCategoryIds = categoryChannel ? [categoryChannel.id] : [];
+                    currentConfig.ticketCategories = categoryChannel
+                        ? [
+                            {
+                                id: categoryChannel.id,
+                                label: categoryChannel.name,
+                                emoji: '🎫',
+                            },
+                        ]
+                        : [];
                     currentConfig.ticketClosedCategoryId = closedCategoryChannel ? closedCategoryChannel.id : null;
                     currentConfig.ticketStaffRoleId = staffRole ? staffRole.id : null;
                     currentConfig.ticketPanelChannelId = panelChannel.id;

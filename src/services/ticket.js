@@ -9,7 +9,7 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { buildStandardLogEmbed, formatLogLine } from '../utils/logging/logEmbeds.js';
-import { getGuildConfig } from './config/guildConfig.js';
+import { getGuildConfig, setGuildConfig } from './config/guildConfig.js';
 import { getTicketData, saveTicketData, deleteTicketData, getOpenTicketCountForUser, incrementTicketCounter } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
 import { createEmbed, errorEmbed } from '../utils/embeds.js';
@@ -47,7 +47,53 @@ function rethrowTicketError(error, operation, userMessage, context = {}) {
   });
 }
 
+function getConfiguredTicketCategoryIds(config = {}) {
+  if (Array.isArray(config.ticketCategoryIds) && config.ticketCategoryIds.length > 0) {
+    return config.ticketCategoryIds.filter(Boolean);
+  }
 
+  if (Array.isArray(config.ticketCategories) && config.ticketCategories.length > 0) {
+    return config.ticketCategories
+      .map(entry => (typeof entry === 'string' ? entry : entry?.id))
+      .filter(Boolean);
+  }
+
+  if (config.ticketCategoryId) {
+    return [config.ticketCategoryId];
+  }
+
+  return [];
+}
+
+async function resolveCategory(guild, categoryId) {
+  if (!categoryId) return null;
+  return guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
+}
+
+async function getNextTicketCategory(guild, config) {
+  const categoryIds = getConfiguredTicketCategoryIds(config);
+  if (!categoryIds.length) return null;
+
+  if (categoryIds.length === 1) {
+    return resolveCategory(guild, categoryIds[0]);
+  }
+
+  const rotationIndex = Number.isInteger(config.ticketCategoryRotationIndex) ? config.ticketCategoryRotationIndex : 0;
+  const selectedCategoryId = categoryIds[rotationIndex % categoryIds.length];
+  const nextRotation = (rotationIndex + 1) % categoryIds.length;
+
+  config.ticketCategoryRotationIndex = nextRotation;
+
+  if (guild.client && guild.id) {
+    try {
+      await setGuildConfig(guild.client, guild.id, config);
+    } catch (error) {
+      logger.warn(`Could not persist ticket category rotation for guild ${guild.id}: ${error.message}`);
+    }
+  }
+
+  return resolveCategory(guild, selectedCategoryId);
+}
 
 function buildTicketControlRow({ claimedBy = null } = {}) {
   return new ActionRowBuilder().addComponents(
@@ -96,12 +142,18 @@ export async function createTicket(guild, member, categoryId, reason = 'No reaso
       );
     }
     
-    let category = categoryId ? 
-      guild.channels.cache.get(categoryId) :
-      guild.channels.cache.find(c => 
+    let category = categoryId ? await resolveCategory(guild, categoryId) : null;
+
+    if (!category) {
+      category = await getNextTicketCategory(guild, config);
+    }
+
+    if (!category && !categoryId) {
+      category = guild.channels.cache.find(c => 
         c.type === ChannelType.GuildCategory && 
         c.name.toLowerCase().includes('tickets')
       );
+    }
     
     if (!category && !categoryId) {
       category = await guild.channels.create({
